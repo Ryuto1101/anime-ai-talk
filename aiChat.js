@@ -1,52 +1,62 @@
 import OpenAI from "openai";
 import fs from "fs";
-
-// .env 読み込み（dotenv 使ってる場合）
 import dotenv from "dotenv";
 dotenv.config();
 
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// キャラ情報を読み込み
 const characters = JSON.parse(fs.readFileSync("characters.json", "utf-8"));
+const gintoki = characters.find(c => c.name === "坂田銀時");
+const luffy = characters.find(c => c.name === "モンキー・D・ルフィ");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // ← .env のキー使う
-});
+// 初期化：会話スタート用のテーマ
+const topic = "今日の昼飯、何食べるか話し合ってくれ";
 
-// キャラ選択
-const charA = characters.find((c) => c.name === "坂田銀時");
-const charB = characters.find((c) => c.name === "モンキー・D・ルフィ");
+// 各キャラごとの履歴（脳みそ）
+let historyGintoki = [
+  { role: "system", content: gintoki.prompt },
+  { role: "user", content: topic }
+];
 
-// 初期テーマ
-let conversation = "今日の昼飯、何食べるか話し合ってくれ";
+let historyLuffy = [
+  { role: "system", content: luffy.prompt },
+  { role: "user", content: topic }
+];
 
-async function startConversation() {
-  let aMessage = conversation;
+// 表示用ログ
+let displayLog = [];
 
-  for (let i = 0; i < 5; i++) {
-    // Aの返答
-    const resA = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        { role: "system", content: charA.prompt },
-        { role: "user", content: aMessage },
-      ],
+async function runDialogue(turns = 6) {
+  for (let i = 0; i < turns; i++) {
+    // STEP 1: 銀時が話す
+    const resGintoki = await openai.chat.completions.create({
+      model: "gpt-4-turbo",
+      messages: historyGintoki
     });
-    const replyA = resA.choices[0].message.content;
-    console.log(`\n🗣️ ${charA.name}：${replyA}`);
 
-    // Bの返答
-    const resB = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [
-        { role: "system", content: charB.prompt },
-        { role: "user", content: replyA },
-      ],
+    const gintokiLine = resGintoki.choices[0].message.content.trim();
+    displayLog.push(`🗣️ 坂田銀時：${gintokiLine}`);
+    historyGintoki.push({ role: "assistant", content: gintokiLine });
+
+    // 銀時の発言をルフィに渡す
+    historyLuffy.push({ role: "user", content: gintokiLine });
+
+    // STEP 2: ルフィが返す
+    const resLuffy = await openai.chat.completions.create({
+      model: "gpt-4-turbo",
+      messages: historyLuffy
     });
-    const replyB = resB.choices[0].message.content;
-    console.log(`\n🗣️ ${charB.name}：${replyB}`);
 
-    aMessage = replyB;
+    const luffyLine = resLuffy.choices[0].message.content.trim();
+    displayLog.push(`🗣️ モンキー・D・ルフィ：${luffyLine}`);
+    historyLuffy.push({ role: "assistant", content: luffyLine });
+
+    // ルフィの発言を銀さんに渡す
+    historyGintoki.push({ role: "user", content: luffyLine });
   }
+
+  console.log(displayLog.join("\n\n"));
 }
 
-startConversation();
-
+runDialogue();
